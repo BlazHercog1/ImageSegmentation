@@ -4,6 +4,9 @@ import numpy as np
 def manhattan_razdalja(a, b):
     return np.sum(np.abs(a-b), axis=-1)
 
+def gaussovo_jedro(d, h):
+    return np.exp(-d**2 / (2 * h**2))
+
 def kmeans(slika, k=3, iteracije=10):
     '''Izvede segmentacijo slike z uporabo metode k-means.1'''
     pass
