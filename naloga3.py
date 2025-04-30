@@ -37,8 +37,28 @@ def kmeans(slika, k=3, iteracije=10, izbira = "nakljucno", dimenzija_centra = 3,
     return nova_slika.reshape(h, w, 3).astype(np.uint8)
     pass
 
-def meanshift(slika, velikost_okna, dimenzija):
+def meanshift(slika, velikost_okna, dimenzija = 3, min_cd=5, max_iteracije=30):
     '''Izvede segmentacijo slike z uporabo metode mean-shift.2'''
+    h_sl, w_sl, c= slika.shape
+    if dimenzija == 5:
+        X, Y = np.meshgrid(np.arange(w_sl), np.arange(h_sl))  # Mreža koordinat
+        podatki = np.concatenate((slika, X[..., np.newaxis], Y[..., np.newaxis]), axis=-1)  # Združi barve + koordinate
+    else:
+        podatki = slika  # Če samo barva, obdrži sliko
+
+    podatki = podatki.reshape(-1, dimenzija)
+    novi_podatki = np.copy(podatki) 
+    for i in range(len(podatki)):
+        tocka = podatki[i]
+        for _ in range(max_iteracije):
+            razdalje = np.linalg.norm(podatki - tocka, axis=1)  # Izračunaj razdalje do vseh drugih točk
+            utezi = gaussovo_jedro(razdalje, h)  # Izračunaj uteži glede na razdalje
+            nova_tocka = np.sum(podatki * utezi[:, np.newaxis], axis=0) / np.sum(utezi)  # Premakni točko na uteženo povprečje
+
+            if np.linalg.norm(nova_tocka - tocka) < 1e-3:  # Preveri konvergenco (če je premik zelo majhen)
+                break
+            tocka = nova_tocka  # Posodobi trenutno točko
+        novi_podatki[i] = tocka
     pass
 
 def izracunaj_centre(slika, izbira, dimenzija_centra, T, k):
