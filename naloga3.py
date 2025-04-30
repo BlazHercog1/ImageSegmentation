@@ -8,8 +8,33 @@ def gaussovo_jedro(d, h):
     return np.exp(-d**2 / (2 * h**2))
 
 
-def kmeans(slika, k=3, iteracije=10):
+def kmeans(slika, k=3, iteracije=10, izbira = "nakljucno", dimenzija_centra = 3, T=30):
     '''Izvede segmentacijo slike z uporabo metode k-means.1'''
+    h, w, c = slika.shape  # Dobi višino, širino in kanale slike
+    if dimenzija_centra == 5:
+        X, Y = np.meshgrid(np.arange(w), np.arange(h))  # Mreža koordinat
+        podatki = np.concatenate((slika, X[..., np.newaxis], Y[..., np.newaxis]), axis=-1)  # Združi barve + koordinate
+    else:
+        podatki = slika  # Če samo barva, obdrži sliko
+
+    podatki = podatki.reshape(-1, dimenzija_centra)
+    centri = izracunaj_centre(slika, izbira, dimenzija_centra, T, k)
+
+    for _ in range(iteracije):
+        dists = np.array([manhattan_razdalja(podatki, center) for center in centri])
+        labels = np.argmin(dists, axis=0)
+
+        for i in range(k):
+            if np.any(labels == i):
+                centri[i] = np.mean(podatki[labels == i], axis=0)
+
+    nova_slika = np.zeros_like(podatki)  # Inicializira novo sliko (prazno)
+    for i in range(k):
+        nova_slika[labels == i] = centri[i]
+    if dimenzija_centra == 5:
+        nova_slika = nova_slika[:, :3]
+
+    return nova_slika.reshape(h, w, 3).astype(np.uint8)
     pass
 
 def meanshift(slika, velikost_okna, dimenzija):
