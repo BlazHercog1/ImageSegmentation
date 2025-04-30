@@ -123,5 +123,9 @@ if __name__ == "__main__":
     segmentirana_kmeans = kmeans(slika, k=k, iteracije=iteracije, izbira="nakljucno", dimenzija_centra=dim, T=T)
     cv.imshow("rezultat_kmeans.png", cv.cvtColor(segmentirana_kmeans, cv.COLOR_RGB2BGR))
 
+    velikost_okna = 40
+    segmentirana_meanshift = meanshift(slika, velikost_okna, dimenzija=5)
+    cv.imwrite("rezultat_meanshift.png", cv.cvtColor(segmentirana_meanshift, cv.COLOR_RGB2BGR))
+
     print("Obdelava končana. Slike shranjene.")
     pass
