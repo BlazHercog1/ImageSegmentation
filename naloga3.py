@@ -57,7 +57,7 @@ def izracunaj_centre(slika, izbira, dimenzija_centra, T, k):
             idy = np.random.randint(0, w)  # Naključno izberi indeks stolpca
             kandidat = slika_features[idx, idy]  # Kandidat za center
             if all(np.linalg.norm(kandidat - c) > T for c in centri):  # Preveri, da je kandidat dovolj oddaljen od vseh obstoječih centrov
-                centri.append(kandidat)  # Če je pogoj izpolnjen, shrani kandidata kot center
+                centri.append(kandidat)
         return np.array(centri)
     elif izbira == "rocno":
         raise NotImplementedError("Ročna izbira še ni implementirana!")
