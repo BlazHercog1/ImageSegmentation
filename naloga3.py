@@ -59,6 +59,29 @@ def meanshift(slika, velikost_okna, dimenzija = 3, min_cd=5, max_iteracije=30):
                 break
             tocka = nova_tocka  # Posodobi trenutno točko
         novi_podatki[i] = tocka
+    #zdruzitev centrov z min_cd
+    centri = []
+    labels = np.full(len(novi_podatki), -1)
+
+    for i, tocka in enumerate(novi_podatki):
+        najblizji = None
+        for idx, center in enumerate(centri):
+            if np.linalg.norm(tocka - center) < min_cd:
+                najblizji = idx
+                break
+        if najblizji is None:
+            centri.append(tocka)
+            labels[i] = len(centri) - 1
+        else:
+            labels[i] = najblizji
+
+    centri = np.array(centri)
+
+    nova_slika = np.zeros((len(labels), 3))
+    for i in range(len(labels)):
+        nova_slika[i] = centri[labels[i]][:3]
+
+    return nova_slika.reshape(h_sl, w_sl, 3).astype(np.uint8)
     pass
 
 def izracunaj_centre(slika, izbira, dimenzija_centra, T, k):
