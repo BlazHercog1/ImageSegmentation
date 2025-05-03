@@ -12,7 +12,9 @@ def kmeans(slika, k=3, iteracije=10, izbira = "nakljucno", dimenzija_centra = 3,
     '''Izvede segmentacijo slike z uporabo metode k-means.1'''
     h, w, c = slika.shape  # Dobi višino, širino in kanale slike
     if dimenzija_centra == 5:
-        X, Y = np.meshgrid(np.arange(w), np.arange(h))  # Mreža koordinat
+        X, Y = np.meshgrid(np.arange(w), np.arange(h))  # Ustvari mrežo koordinat X in Y
+        X = X / w
+        Y = Y / h
         podatki = np.concatenate((slika, X[..., np.newaxis], Y[..., np.newaxis]), axis=-1)  # Združi barve + koordinate
     else:
         podatki = slika  # Če samo barva, obdrži sliko
@@ -37,69 +39,80 @@ def kmeans(slika, k=3, iteracije=10, izbira = "nakljucno", dimenzija_centra = 3,
     return nova_slika.reshape(h, w, 3).astype(np.uint8)
     pass
 
-def meanshift(slika, velikost_okna, dimenzija = 3, min_cd=5, max_iteracije=30):
-    '''Izvede segmentacijo slike z uporabo metode mean-shift.2'''
-    h_sl, w_sl, c= slika.shape
+def meanshift(slika, h, dimenzija=3, min_cd=20, max_iter=10):
+    """Segmentacija slike z uporabo metode Mean-Shift."""
+    slika = slika.astype(np.float32)
+    h_img, w_img, _ = slika.shape
+
     if dimenzija == 5:
-        X, Y = np.meshgrid(np.arange(w_sl), np.arange(h_sl))  # Mreža koordinat
-        podatki = np.concatenate((slika, X[..., np.newaxis], Y[..., np.newaxis]), axis=-1)  # Združi barve + koordinate
+        X, Y = np.meshgrid(np.arange(w_img), np.arange(h_img))
+        #normaliziramo, ker imajo barve(0-255) in koordinate okolja(0-102) drugačne vrednosti/razmerja
+        X = X / w_img  # Normalize to [0, 1]
+        Y = Y / h_img  # Normalize to [0, 1]
+        slika_norm = slika / 255.0  # Normalize colors
+        points = np.concatenate((slika, X[..., np.newaxis], Y[..., np.newaxis]), axis=-1)
     else:
-        podatki = slika  # Če samo barva, obdrži sliko
+        points = slika
 
-    podatki = podatki.reshape(-1, dimenzija)
-    novi_podatki = np.copy(podatki) 
-    for i in range(len(podatki)):
-        tocka = podatki[i]
-        for _ in range(max_iteracije):
-            razdalje = np.linalg.norm(podatki - tocka, axis=1)  # Izračunaj razdalje do vseh drugih točk
-            utezi = gaussovo_jedro(razdalje, h)  # Izračunaj uteži glede na razdalje
-            nova_tocka = np.sum(podatki * utezi[:, np.newaxis], axis=0) / np.sum(utezi)  # Premakni točko na uteženo povprečje
+    points = points.reshape(-1, dimenzija)
+    premiki = np.copy(points)
 
-            if np.linalg.norm(nova_tocka - tocka) < 1e-3:  # Preveri konvergenco (če je premik zelo majhen)
+    for i in range(len(points)):
+        tocka = points[i]
+        for _ in range(max_iter):
+            razdalje = manhattan_razdalja(premiki, tocka)
+            mask = razdalje < 3 * h
+            if np.sum(mask) == 0:  # Avoid division by zero
                 break
-            tocka = nova_tocka  # Posodobi trenutno točko
-        novi_podatki[i] = tocka
-    #zdruzitev centrov z min_cd
+            utezi = gaussovo_jedro(razdalje[mask], h)
+            nova_tocka = np.sum(utezi[:, None] * premiki[mask], axis=0) / np.sum(utezi)
+            if manhattan_razdalja(nova_tocka, tocka) < 1:
+                break
+            tocka = nova_tocka
+        premiki[i] = tocka
+        if i % 3000 == 0:
+            print(f"{i}/{len(points)} obdelanih...")
+
+    # Združevanje končnih točk v centre (glede na min_cd)
     centri = []
-    labels = np.full(len(novi_podatki), -1)
-
-    for i, tocka in enumerate(novi_podatki):
-        najblizji = None
-        for idx, center in enumerate(centri):
-            if np.linalg.norm(tocka - center) < min_cd:
-                najblizji = idx
+    labels = np.zeros(len(points), dtype=np.int32)
+    for i in range(len(points)):
+        found = False
+        for j, c in enumerate(centri):
+            if manhattan_razdalja(premiki[i], c) < min_cd:
+                labels[i] = j
+                found = True
                 break
-        if najblizji is None:
-            centri.append(tocka)
+        if not found:
+            centri.append(premiki[i])
             labels[i] = len(centri) - 1
-        else:
-            labels[i] = najblizji
+    print(f'Najdenih {len(centri)} skupin točk.')
 
-    centri = np.array(centri)
-
-    nova_slika = np.zeros((len(labels), 3))
-    for i in range(len(labels)):
-        nova_slika[i] = centri[labels[i]][:3]
-
-    return nova_slika.reshape(h_sl, w_sl, 3).astype(np.uint8)
+    nova_slika = np.array([centri[l] for l in labels])
+    if dimenzija == 5:
+        nova_slika = nova_slika[:, :3]
+    return nova_slika.reshape(h_img, w_img, 3).astype(np.uint8)
     pass
 
 def izracunaj_centre(slika, izbira, dimenzija_centra, T, k):
     h, w, _ = slika.shape  # Dobi višino (h), širino (w) in globino (_) slike
     if dimenzija_centra == 5:
         X, Y = np.meshgrid(np.arange(w), np.arange(h))  # Ustvari mrežo koordinat X in Y
+        X = X / w
+        Y = Y / h
+        slika_norm = slika / 255.0
         slika_features = np.concatenate((slika, X[..., np.newaxis], Y[..., np.newaxis]), axis=-1)  # Združi barve in koordinate
     else:
         slika_features = slika  # Če dimenzija=3, obdrži samo barve
 
     if izbira == "nakljucno":
-        centri = []  # Inicializira seznam za centre
+        slika_features = slika_features.reshape(-1, dimenzija_centra)
+        centri = []
         while len(centri) < k:
-            idx = np.random.randint(0, h)  # Naključno izberi indeks vrstice
-            idy = np.random.randint(0, w)  # Naključno izberi indeks stolpca
-            kandidat = slika_features[idx, idy]  # Kandidat za center
-            if all(np.linalg.norm(kandidat - c) > T for c in centri):  # Preveri, da je kandidat dovolj oddaljen od vseh obstoječih centrov
-                centri.append(kandidat)  # Če je pogoj izpolnjen, shrani kandidata kot center
+            idx = np.random.randint(0, len(slika_features))
+            kandidat = slika_features[idx]
+            if not centri or all(manhattan_razdalja(kandidat, c) > T for c in centri):
+                centri.append(kandidat)
         return np.array(centri)  # Vrni centre kot numpy array
     elif izbira == "rocno":
         raise NotImplementedError("Ročna izbira še ni implementirana!")  # Če bi hoteli ročno izbirati centre
@@ -108,24 +121,17 @@ def izracunaj_centre(slika, izbira, dimenzija_centra, T, k):
 
 
 if __name__ == "__main__":
-     # -- Naloži sliko --
-    slika = cv.imread('.utils\zelenjava.jpg')  # Preberi sliko iz datoteke
+    print("Začetek")
+    slika = cv.imread(".utils\zelenjava.jpg")
     if slika is None:
         raise FileNotFoundError("Slika 'zelenjava.jpg' ni bila najdena.")
-    slika = cv.cvtColor(slika, cv.COLOR_BGR2RGB)
+    slika = cv.cvtColor(slika, cv.COLOR_BGR2RGB)#da bo slika v izvornih barvah
+    slika = cv.resize(slika, (90, 90))  # Pomanjšaj sliko
 
-    # -- K-means segmentacija --
-    k = 4  # Število centrov
-    iteracije = 10
-    dim = 5
-    T = 20  # Toleranca med centri
+    segment_kmeans = kmeans(slika, k=3, iteracije=10, dimenzija_centra=5, T=30)
+    cv.imwrite("rezultat_kmeans.png", cv.cvtColor(segment_kmeans, cv.COLOR_RGB2BGR))
 
-    segmentirana_kmeans = kmeans(slika, k=k, iteracije=iteracije, izbira="nakljucno", dimenzija_centra=dim, T=T)
-    cv.imshow("rezultat_kmeans.png", cv.cvtColor(segmentirana_kmeans, cv.COLOR_RGB2BGR))
+    segment_meanshift = meanshift(slika, h=10, dimenzija=5, min_cd=35, max_iter=10)
+    cv.imwrite("rezultat_meanshift.png", cv.cvtColor(segment_meanshift, cv.COLOR_RGB2BGR))
 
-    velikost_okna = 40
-    segmentirana_meanshift = meanshift(slika, velikost_okna, dimenzija=5)
-    cv.imwrite("rezultat_meanshift.png", cv.cvtColor(segmentirana_meanshift, cv.COLOR_RGB2BGR))
-
-    print("Obdelava končana. Slike shranjene.")
-    pass
+    print("Segmentacija končana.")
